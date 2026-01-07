@@ -1,0 +1,21 @@
+{
+  "stashapp": {
+    "url": "http://10.11.1.33:9999",
+    "apiKey": ""
+  },
+  "stashdb": {
+    "url": "https://stashdb.org",
+    "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiI1M2IwNTMzYy05N2RiLTQ5MjAtOGRmOS1iODBiNGVlOTgyYzkiLCJzdWIiOiJBUElLZXkiLCJpYXQiOjE3NTUxMzE1MDF9.Tqp2Kt8YCDUpMe0a8_kPgSseyGTiwxjDzNVd13wgw3U"
+  },
+  "whisparr": {
+    "url": "http://10.11.1.33:6969",
+    "apiKey": "0251cfcc8c174d618b5a680d5099851b",
+    "rootFolderPath": "/mounts/media",
+    "apiDelaySeconds": 2,
+    "qualityProfileId": 1
+  },
+  "http": {
+    "apiDelaySeconds": 2.0,
+    "timeoutSeconds": 30
+  }
+}
