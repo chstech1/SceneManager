@@ -20,12 +20,13 @@ def extract_stashdb_id(stash_ids: List[Dict[str, Any]]) -> Optional[str]:
 
 def stash_favorite_performers(stash_base: str, stash_key: str, logger: JsonLogger) -> List[Dict[str, Any]]:
     query = """
-    query FindPerformers($perPage: Int!, $page: Int!, $performerFilter: PerformerFilterType) {
-      findPerformers(filter: { per_page: $perPage, page: $page }, performer_filter: $performerFilter) {
+    query FindPerformers($perPage: Int!, $page: Int!) {
+      findPerformers(filter: { per_page: $perPage, page: $page }) {
         count
         performers {
           id
           name
+          favorite
           stash_ids { endpoint stash_id }
         }
       }
@@ -33,22 +34,31 @@ def stash_favorite_performers(stash_base: str, stash_key: str, logger: JsonLogge
     """
     performers: List[Dict[str, Any]] = []
     page = 1
+    total_seen = 0
 
     while True:
         data = gql_post(
             f"{stash_base}/graphql",
             stash_key,
             query,
-            {"perPage": PER_PAGE, "page": page, "performerFilter": {"favorite": True}},
+            {"perPage": PER_PAGE, "page": page},
             logger=logger,
             label="stash.findPerformers.favorites",
         )
         block = data["findPerformers"]
         page_performers = block.get("performers") or []
-        performers.extend(page_performers)
-        logger.log("stash.performers.page", page=page, returned=len(page_performers), total=block.get("count") or 0)
+        favorites = [p for p in page_performers if p.get("favorite") is True]
+        performers.extend(favorites)
+        total_seen += len(page_performers)
+        logger.log(
+            "stash.performers.page",
+            page=page,
+            returned=len(page_performers),
+            favorites=len(favorites),
+            total=block.get("count") or 0,
+        )
 
-        if len(performers) >= (block.get("count") or 0):
+        if total_seen >= (block.get("count") or 0):
             break
         page += 1
 
