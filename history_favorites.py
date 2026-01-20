@@ -3,7 +3,7 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from common import JsonLogger, gql_post, load_config, performer_dir, read_json, write_json
+from common import JsonLogger, gql_post, load_config, performer_dir, read_json, write_json, utc_now_iso
 
 OUT_FILE = "history.json"
 PER_PAGE = 100
@@ -132,8 +132,16 @@ def main() -> None:
     stash_key = (cfg["stashapp"].get("apiKey") or "").strip()
 
     out_root = Path(args.out).expanduser().resolve()
-    logger = JsonLogger(out_root / "history_favorites", append=False)
+    run_dir = out_root / "history_favorites"
+    logger = JsonLogger(run_dir, append=False)
+    log_path = run_dir / "history_favorites.log"
+
+    def write_log(line: str) -> None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
     logger.log("run.start", step="history_favorites", runDir=str(out_root))
+    write_log(f"Run started: {utc_now_iso()}")
 
     performers = stash_favorite_performers(stash_url, stash_key, logger)
 
@@ -152,11 +160,15 @@ def main() -> None:
         run_dir = performer_dir(str(out_root), stashdb_id)
         history_path = run_dir / OUT_FILE
 
-        history = load_history(history_path, stashdb_id, performer.get("name") or "")
+        performer_name = performer.get("name") or ""
+        history = load_history(history_path, stashdb_id, performer_name)
         scenes = stash_scenes_for_performer_id(stash_url, stash_key, performer["id"], logger)
 
         existing_ids = {str(s.get("id")) for s in history.get("scenes") or [] if s.get("id")}
+        current_scene_ids = {str(s.get("id")) for s in scenes if s.get("id")}
         added = 0
+        added_summaries: List[str] = []
+        missing_summaries: List[str] = []
 
         for scene in scenes:
             scene_id = scene.get("id")
@@ -165,20 +177,41 @@ def main() -> None:
             history.setdefault("scenes", []).append(scene)
             if scene_id:
                 existing_ids.add(str(scene_id))
+            added_summaries.append(f"{scene.get('title') or 'Untitled'} ({scene_id})")
             added += 1
+
+        for scene in history.get("scenes") or []:
+            scene_id = scene.get("id") if isinstance(scene, dict) else None
+            if scene_id and str(scene_id) not in current_scene_ids:
+                missing_summaries.append(f"{scene.get('title') or 'Untitled'} ({scene_id})")
 
         if added > 0 or not history_path.exists():
             write_json(history_path, history)
 
         total_added += added
+        write_log(f"Performer: {performer_name} [{stashdb_id}]")
+        if added_summaries:
+            write_log("  Added scenes:")
+            for entry in added_summaries:
+                write_log(f"    - {entry}")
+        else:
+            write_log("  Added scenes: none")
+        if missing_summaries:
+            write_log("  Missing from StashApp (still in history):")
+            for entry in missing_summaries:
+                write_log(f"    - {entry}")
+        else:
+            write_log("  Missing from StashApp (still in history): none")
+        write_log("")
         logger.log(
             "history.updated",
             stashdbPerformerId=stashdb_id,
             stashPerformerId=performer.get("id"),
-            performerName=performer.get("name"),
+            performerName=performer_name,
             scenesFetched=len(scenes),
             scenesAdded=added,
             historyPath=str(history_path),
+            missingFromStashApp=len(missing_summaries),
         )
 
     logger.log(
@@ -188,6 +221,7 @@ def main() -> None:
         performersSkippedNoStashdb=skipped_no_stashdb,
         scenesAdded=total_added,
     )
+    write_log(f"Run completed: {utc_now_iso()}")
 
 
 if __name__ == "__main__":
