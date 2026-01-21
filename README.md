@@ -62,6 +62,14 @@ Example:
 python history_favorites.py --out ./runs
 ```
 
+### `mass_unrar.py`
+Recursively scans a root folder for `.rar` and multi-part archives (including `.r00`, `.r01`, and `.partN.rar`), extracts each archive, and deletes only the files associated with that archive after a successful extraction. All actions are logged to `mass_unrar.log` in the root folder.
+
+Example:
+```bash
+python mass_unrar.py /path/to/root
+```
+
 ### `sync_studios_to_whisparr.py`
 Syncs studios from StashApp into Whisparr by creating an unmonitored series for each missing studio. It performs a loose normalization pass to match existing Whisparr series by name and only creates series for studios that do not already exist. Requires `whisparr.rootFolderPath` and `whisparr.qualityProfileId` in `config.json`, supports `--dry-run`, and writes a summary JSON report under `./runs/sync_studios/`.
 
