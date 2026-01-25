@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import subprocess
 import sys
@@ -18,6 +19,37 @@ def prompt(message: str) -> str:
 def parse_extra_args(raw: str) -> list[str]:
     return [arg for arg in raw.split() if arg]
 
+def load_favorite_performers(out_root: Path) -> list[tuple[str, str]]:
+    performers: list[tuple[str, str]] = []
+    for history_path in out_root.glob("*/history.json"):
+        try:
+            payload = json.loads(history_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        performer = payload.get("performer") if isinstance(payload, dict) else None
+        if isinstance(performer, dict):
+            pid = str(performer.get("id") or "")
+            name = str(performer.get("name") or "").strip()
+            if pid:
+                performers.append((pid, name))
+    performers.sort(key=lambda item: (item[1].lower() if item[1] else "", item[0]))
+    return performers
+
+
+def prompt_performer_id(out_root: Path) -> str:
+    performers = load_favorite_performers(out_root)
+    if performers:
+        print("\nFavorite performers (from history.json):")
+        for idx, (pid, name) in enumerate(performers, start=1):
+            label = f"{name} [{pid}]" if name else pid
+            print(f"{idx}) {label}")
+        choice = prompt("Select performer number or press Enter to type UUID: ")
+        if choice.isdigit():
+            index = int(choice)
+            if 1 <= index <= len(performers):
+                return performers[index - 1][0]
+    return prompt("Enter StashDB performer UUID: ")
+
 
 def main() -> None:
     here = Path(__file__).resolve().parent
@@ -36,6 +68,9 @@ def main() -> None:
         "10": ("find_duplicate_folders.py", here / "find_duplicate_folders.py"),
         "11": ("mass_unrar.py", here / "mass_unrar.py"),
     }
+    requires_performer = {"1", "2", "3", "4", "5"}
+    supports_out = {"1", "2", "3", "4", "5", "7", "8", "9"}
+    requires_root = {"10", "11"}
 
     for _, (_, path) in scripts.items():
         if not path.exists():
@@ -63,8 +98,25 @@ def main() -> None:
             return
         if choice in scripts:
             name, path = scripts[choice]
+            out_root = Path(prompt("Output root (default ./runs): ") or "./runs").expanduser().resolve()
+            extra_args = []
+            if choice in requires_performer:
+                performer_id = prompt_performer_id(out_root)
+                if not performer_id:
+                    print("Performer UUID is required.")
+                    continue
+                extra_args.append(performer_id)
+            if choice in requires_root:
+                root_path = prompt("Root folder path: ")
+                if not root_path:
+                    print("Root folder path is required.")
+                    continue
+                extra_args.append(root_path)
             raw_args = prompt(f"Extra args for {name} (leave blank for none): ")
-            cmd = [py, str(path)] + parse_extra_args(raw_args)
+            extra_args += parse_extra_args(raw_args)
+            if choice in supports_out and "--out" not in extra_args:
+                extra_args += ["--out", str(out_root)]
+            cmd = [py, str(path)] + extra_args
             exit_code = run_cmd(cmd, cwd=here)
             if exit_code != 0:
                 print(f"Command failed with exit code {exit_code}")

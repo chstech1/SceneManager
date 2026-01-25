@@ -13,7 +13,7 @@ python run_all_steps.py <stashdb_uuid> --out ./runs --dry-run --limit 25
 ```
 
 ### `interface.py`
-Interactive menu that lets you choose and run any of the scripts in this repo. You can supply any arguments for the selected script, and output is streamed to the console.
+Interactive menu that lets you choose and run any of the scripts in this repo. Required arguments are prompted (including a performer picker sourced from existing `history.json` files), `--out` defaults to `./runs`, and output is streamed to the console.
 
 Example:
 ```bash
