@@ -65,7 +65,6 @@ def stash_all_scenes(
           title
           date
           studio { id name }
-          tags { id name }
           files {
             size
             width
@@ -136,7 +135,7 @@ def get_scene_metrics(scene: Dict[str, Any]) -> Tuple[int, int]:
 
 def ensure_tag_id(stash_base: str, stash_key: str, logger: JsonLogger) -> str:
     query = """
-    query FindTags($filter: TagFilterType!) {
+    query FindTags($filter: FindFilterType!) {
       findTags(filter: $filter) {
         count
         tags { id name }
@@ -180,11 +179,24 @@ def add_tag_to_scene(
     tag_id: str,
     logger: JsonLogger,
 ) -> None:
-    existing_tags = [t.get("id") for t in (scene.get("tags") or []) if t.get("id")]
-    if tag_id in existing_tags:
-        logger.log("scene.tag.skip", sceneId=scene.get("id"), reason="already tagged")
-        return
-
+    query = """
+    query FindScene($id: ID!) {
+      findScene(id: $id) {
+        id
+        tags { id name }
+      }
+    }
+    """
+    data = gql_post(
+        f"{stash_base}/graphql",
+        stash_key,
+        query,
+        {"id": scene["id"]},
+        logger=logger,
+        label="stash.findScene.tags",
+    )
+    scene_data = data.get("findScene") or {}
+    existing_tags = [t.get("id") for t in (scene_data.get("tags") or []) if t.get("id")]
     tag_ids = existing_tags + [tag_id]
     mutation = """
     mutation SceneUpdate($input: SceneUpdateInput!) {
