@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from common import JsonLogger, gql_post, load_config, looks_like_uuid, performer_dir, write_json
+from common import JsonLogger, gql_post, load_config, write_json
 
 TAG_NAME = "_DuplicateMarkForDeletion"
 PER_PAGE = 100
@@ -50,67 +50,14 @@ def date_match(a: Optional[str], b: Optional[str]) -> bool:
     return abs((da - db).days) <= DATE_WINDOW_DAYS
 
 
-def stash_find_performer_by_stashdb_id(
+def stash_all_scenes(
     stash_base: str,
     stash_key: str,
-    stashdb_performer_id: str,
-    logger: JsonLogger,
-) -> Optional[Dict[str, Any]]:
-    query = """
-    query FindPerformers($perPage: Int!, $page: Int!) {
-      findPerformers(filter: { per_page: $perPage, page: $page }) {
-        count
-        performers {
-          id
-          name
-          stash_ids { endpoint stash_id }
-        }
-      }
-    }
-    """
-    page = 1
-    target = stashdb_performer_id.strip()
-
-    while True:
-        data = gql_post(
-            f"{stash_base}/graphql",
-            stash_key,
-            query,
-            {"perPage": PER_PAGE, "page": page},
-            logger=logger,
-            label="stash.findPerformers",
-        )
-        block = data["findPerformers"]
-        performers = block["performers"] or []
-
-        for performer in performers:
-            for sid in (performer.get("stash_ids") or []):
-                endpoint = (sid.get("endpoint") or "").lower()
-                stash_id = str(sid.get("stash_id") or "")
-                if stash_id == target and ("stashdb" in endpoint or "stashdb.org" in endpoint):
-                    logger.log("stash.performer.mapped", stashdbPerformerId=target, stashPerformerId=performer["id"])
-                    return performer
-
-        if page * PER_PAGE >= (block.get("count") or 0):
-            break
-        page += 1
-
-    logger.log("stash.performer.map_not_found", stashdbPerformerId=target)
-    return None
-
-
-def stash_scenes_for_performer_id(
-    stash_base: str,
-    stash_key: str,
-    performer_id: str,
     logger: JsonLogger,
 ) -> List[Dict[str, Any]]:
     query = """
-    query FindScenes($pid: ID!, $perPage: Int!, $page: Int!) {
-      findScenes(
-        scene_filter: { performers: { value: [$pid], modifier: INCLUDES } }
-        filter: { per_page: $perPage, page: $page }
-      ) {
+    query FindScenes($perPage: Int!, $page: Int!) {
+      findScenes(filter: { per_page: $perPage, page: $page }) {
         count
         scenes {
           id
@@ -135,15 +82,15 @@ def stash_scenes_for_performer_id(
             f"{stash_base}/graphql",
             stash_key,
             query,
-            {"pid": performer_id, "perPage": PER_PAGE, "page": page},
+            {"perPage": PER_PAGE, "page": page},
             logger=logger,
-            label="stash.findScenes",
+            label="stash.findScenes.all",
         )
 
         block = data["findScenes"]
         scenes = block["scenes"] or []
         out.extend(scenes)
-        logger.log("stash.page", page=page, returned=len(scenes), total=block.get("count"), performerId=performer_id)
+        logger.log("stash.page", page=page, returned=len(scenes), total=block.get("count"))
 
         if len(out) >= (block.get("count") or 0):
             break
@@ -273,13 +220,9 @@ def pick_duplicate(scene_a: Dict[str, Any], scene_b: Dict[str, Any]) -> Dict[str
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Find duplicate StashApp scenes and tag lower-quality copies.")
-    parser.add_argument("performer_id", help="StashDB performer UUID")
     parser.add_argument("--out", default="./runs", help="Output directory for reports/logs")
     parser.add_argument("--dry-run", action="store_true", help="Do not apply tags; report only")
     args = parser.parse_args()
-
-    if not looks_like_uuid(args.performer_id):
-        raise SystemExit("performer_id must be a StashDB UUID.")
 
     script_path = Path(__file__).resolve()
     cfg = load_config(script_path)
@@ -287,7 +230,7 @@ def main() -> None:
     stash_key = (cfg["stashapp"].get("apiKey") or "").strip()
 
     out_root = Path(args.out).expanduser().resolve()
-    run_dir = performer_dir(str(out_root), args.performer_id)
+    run_dir = out_root / "duplicate_scenes"
     logger = JsonLogger(run_dir, append=True)
     log_path = out_root / "duplicate_scenes.log"
 
@@ -298,15 +241,10 @@ def main() -> None:
             f.write(line + "\n")
         print(line)
 
-    logger.log("run.start", step="duplicates", performerId=args.performer_id, runDir=str(run_dir), dryRun=args.dry_run)
-    log_line(f"Run started for performer {args.performer_id} (dry_run={args.dry_run})")
+    logger.log("run.start", step="duplicates", runDir=str(run_dir), dryRun=args.dry_run)
+    log_line(f"Run started (dry_run={args.dry_run})")
 
-    performer = stash_find_performer_by_stashdb_id(stash_url, stash_key, args.performer_id, logger)
-    if not performer:
-        log_line("No local Stash performer found for this StashDB UUID.")
-        raise SystemExit("No local Stash performer found for this StashDB UUID.")
-
-    scenes = stash_scenes_for_performer_id(stash_url, stash_key, performer["id"], logger)
+    scenes = stash_all_scenes(stash_url, stash_key, logger)
     pairs = find_duplicate_pairs(scenes)
     tag_id = ensure_tag_id(stash_url, stash_key, logger)
 
@@ -332,7 +270,7 @@ def main() -> None:
             f"similarity={similarity:.2f}"
         )
 
-    out_path = run_dir / "duplicate_scenes_report.json"
+    out_path = out_root / "duplicate_scenes_report.json"
     write_json(out_path, {"generatedAt": utc_now_iso(), "pairs": results})
     logger.log("artifact.written", path=str(out_path), pairs=len(results), tagged=tagged)
     logger.log("run.end", status="ok")
