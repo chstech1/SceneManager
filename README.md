@@ -71,11 +71,12 @@ python mass_unrar.py /path/to/root
 ```
 
 ### `duplicate_scenes.py`
-Finds likely duplicate StashApp scenes across the entire library (using normalized title + studio with fuzzy title matching and a ±7 day date window) and tags the lower-quality copy with `_DuplicateMarkForDeletion`. The lower-quality choice is based on resolution first, then file size. A JSON report is written to `duplicate_scenes_report.json`, and a summary log is written to `./runs/duplicate_scenes.log`.
+Finds likely duplicate StashApp scenes across the entire library (using normalized title + studio with fuzzy title matching and a ±7 day date window) and tags the lower-quality copy with `_DuplicateMarkForDeletion`. The lower-quality choice is based on resolution first, then file size. The script writes a snapshot of scene data to `duplicate_scenes_source.json`, performs comparison locally, then applies tag updates. A JSON report is written to `duplicate_scenes_report.json`, and a summary log is written to `./runs/duplicate_scenes.log`.
 
 Example:
 ```bash
 python duplicate_scenes.py --out ./runs
+python duplicate_scenes.py --out ./runs --refresh
 ```
 
 ### `sync_studios_to_whisparr.py`

@@ -6,12 +6,13 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from common import JsonLogger, gql_post, load_config, write_json
+from common import JsonLogger, gql_post, load_config, read_json, write_json
 
 TAG_NAME = "_DuplicateMarkForDeletion"
 PER_PAGE = 100
 TITLE_SIMILARITY = 0.9
 DATE_WINDOW_DAYS = 7
+SCENES_SNAPSHOT = "duplicate_scenes_source.json"
 
 
 def utc_now_iso() -> str:
@@ -97,6 +98,24 @@ def stash_all_scenes(
         page += 1
 
     return out
+
+
+def load_or_fetch_scenes(
+    stash_base: str,
+    stash_key: str,
+    logger: JsonLogger,
+    out_root: Path,
+    refresh: bool,
+) -> List[Dict[str, Any]]:
+    snapshot_path = out_root / SCENES_SNAPSHOT
+    if snapshot_path.exists() and not refresh:
+        logger.log("snapshot.load", path=str(snapshot_path))
+        return read_json(snapshot_path)
+
+    scenes = stash_all_scenes(stash_base, stash_key, logger)
+    write_json(snapshot_path, {"generatedAt": utc_now_iso(), "scenes": scenes})
+    logger.log("snapshot.write", path=str(snapshot_path), scenes=len(scenes))
+    return scenes
 
 
 def get_scene_metrics(scene: Dict[str, Any]) -> Tuple[int, int]:
@@ -222,6 +241,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Find duplicate StashApp scenes and tag lower-quality copies.")
     parser.add_argument("--out", default="./runs", help="Output directory for reports/logs")
     parser.add_argument("--dry-run", action="store_true", help="Do not apply tags; report only")
+    parser.add_argument("--refresh", action="store_true", help="Refresh cached scene snapshot before comparison")
     args = parser.parse_args()
 
     script_path = Path(__file__).resolve()
@@ -244,7 +264,10 @@ def main() -> None:
     logger.log("run.start", step="duplicates", runDir=str(run_dir), dryRun=args.dry_run)
     log_line(f"Run started (dry_run={args.dry_run})")
 
-    scenes = stash_all_scenes(stash_url, stash_key, logger)
+    snapshot_payload = load_or_fetch_scenes(stash_url, stash_key, logger, out_root, args.refresh)
+    scenes = snapshot_payload.get("scenes") if isinstance(snapshot_payload, dict) else None
+    if scenes is None:
+        scenes = snapshot_payload
     pairs = find_duplicate_pairs(scenes)
     tag_id = ensure_tag_id(stash_url, stash_key, logger)
 
