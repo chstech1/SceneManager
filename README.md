@@ -70,6 +70,14 @@ Example:
 python mass_unrar.py /path/to/root
 ```
 
+### `duplicate_scenes.py`
+Finds likely duplicate StashApp scenes for a performer (using normalized title + studio with fuzzy title matching and a ±7 day date window) and tags the lower-quality copy with `_DuplicateMarkForDeletion`. The lower-quality choice is based on resolution first, then file size. A JSON report is written to `duplicate_scenes_report.json`, and a summary log is written to `./runs/duplicate_scenes.log`.
+
+Example:
+```bash
+python duplicate_scenes.py <stashdb_uuid> --out ./runs
+```
+
 ### `sync_studios_to_whisparr.py`
 Syncs studios from StashApp into Whisparr by creating an unmonitored series for each missing studio. It performs a loose normalization pass to match existing Whisparr series by name and only creates series for studios that do not already exist. Requires `whisparr.rootFolderPath` and `whisparr.qualityProfileId` in `config.json`, supports `--dry-run`, and writes a summary JSON report under `./runs/sync_studios/`.
 
