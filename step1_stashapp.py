@@ -10,11 +10,13 @@ from common import (
     load_config,
     looks_like_uuid,
     performer_dir,
+    read_json,
     write_json,
 )
 
 # Output file name (overwritten each run)
 OUT_FILE = "01_stash_scenes.json"
+HISTORY_FILE = "history.json"
 
 
 def stash_find_performer_by_stashdb_id(stash_base: str, stash_key: str, stashdb_performer_id: str, logger: JsonLogger) -> Optional[Dict[str, Any]]:
@@ -146,6 +148,21 @@ def main() -> None:
     else:
         payload = {"inputPerformerId": args.performer_id, "stashPerformerId": args.performer_id, "stashPerformerName": None, "scenes": scenes}
 
+    history_path = run_dir / HISTORY_FILE
+    if history_path.exists():
+        history_payload = read_json(history_path)
+        history_scenes = history_payload.get("scenes") if isinstance(history_payload, dict) else None
+        if isinstance(history_scenes, list):
+            existing_ids = {str(s.get("id")) for s in payload.get("scenes") or [] if s.get("id")}
+            for scene in history_scenes:
+                scene_id = scene.get("id") if isinstance(scene, dict) else None
+                if scene_id and str(scene_id) in existing_ids:
+                    continue
+                payload["scenes"].append(scene)
+                if scene_id:
+                    existing_ids.add(str(scene_id))
+            logger.log("stash.history.merged", path=str(history_path), total=len(payload.get("scenes") or []))
+
     out_path = run_dir / OUT_FILE
     write_json(out_path, payload)
     logger.log("artifact.written", step=1, path=str(out_path), scenes=len(payload.get("scenes") or []), stashPerformerId=payload.get("stashPerformerId"))
@@ -154,4 +171,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
