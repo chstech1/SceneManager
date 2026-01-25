@@ -12,6 +12,14 @@ Example:
 python run_all_steps.py <stashdb_uuid> --out ./runs --dry-run --limit 25
 ```
 
+### `interface.py`
+Interactive menu that lets you choose and run any of the scripts in this repo. You can supply any arguments for the selected script, and output is streamed to the console.
+
+Example:
+```bash
+python interface.py
+```
+
 ### `step1_stashapp.py`
 Fetches scenes for a performer from StashApp and writes `01_stash_scenes.json` in `./runs/<performer_id>/`. If the input is a StashDB UUID and there are no scenes for that ID in StashApp, it attempts to map the UUID to a local Stash performer by scanning `stash_ids`, then re-fetches scenes for that local performer.
 
