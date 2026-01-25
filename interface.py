@@ -19,19 +19,26 @@ def prompt(message: str) -> str:
 def parse_extra_args(raw: str) -> list[str]:
     return [arg for arg in raw.split() if arg]
 
-def load_favorite_performers(out_root: Path) -> list[tuple[str, str]]:
-    performers: list[tuple[str, str]] = []
+def read_json_file(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def load_favorite_performers(out_root: Path) -> list[tuple[str, str, str]]:
+    performers: list[tuple[str, str, str]] = []
     for history_path in out_root.glob("*/history.json"):
-        try:
-            payload = json.loads(history_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
+        payload = read_json_file(history_path)
         performer = payload.get("performer") if isinstance(payload, dict) else None
         if isinstance(performer, dict):
             pid = str(performer.get("id") or "")
             name = str(performer.get("name") or "").strip()
             if pid:
-                performers.append((pid, name))
+                state_path = history_path.parent / "04_whisparr_state.json"
+                state = read_json_file(state_path) if state_path.exists() else {}
+                last_run = str(state.get("lastRunAtUtc") or "")
+                performers.append((pid, name, last_run))
     performers.sort(key=lambda item: (item[1].lower() if item[1] else "", item[0]))
     return performers
 
@@ -40,8 +47,12 @@ def prompt_performer_id(out_root: Path) -> str:
     performers = load_favorite_performers(out_root)
     if performers:
         print("\nFavorite performers (from history.json):")
-        for idx, (pid, name) in enumerate(performers, start=1):
+        for idx, (pid, name, last_run) in enumerate(performers, start=1):
             label = f"{name} [{pid}]" if name else pid
+            if last_run:
+                label = f"{label} (last step4: {last_run})"
+            else:
+                label = f"{label} (last step4: never)"
             print(f"{idx}) {label}")
         choice = prompt("Select performer number or press Enter to type UUID: ")
         if choice.isdigit():
