@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from common import JsonLogger, gql_post, load_config, read_json, write_json
 
 TAG_NAME = "_DuplicateMarkForDeletion"
+SAVED_TAG_NAME = "Saved"
 PER_PAGE = 100
 TITLE_SIMILARITY = 0.9
 DATE_WINDOW_DAYS = 7
@@ -25,6 +26,17 @@ def normalize_text(value: Optional[str]) -> str:
     cleaned = re.sub(r"[^\w\s]", "", value.strip().lower())
     return re.sub(r"\s+", " ", cleaned).strip()
 
+
+def extract_number_tokens(value: str) -> List[str]:
+    return re.findall(r"\d+", value)
+
+
+def numbers_compatible(a: str, b: str) -> bool:
+    nums_a = extract_number_tokens(a)
+    nums_b = extract_number_tokens(b)
+    if not nums_a and not nums_b:
+        return True
+    return nums_a == nums_b
 
 def title_similarity(a: str, b: str) -> float:
     if not a and not b:
@@ -133,7 +145,7 @@ def get_scene_metrics(scene: Dict[str, Any]) -> Tuple[int, int]:
     return best_res, best_size
 
 
-def ensure_tag_id(stash_base: str, stash_key: str, logger: JsonLogger) -> str:
+def ensure_tag_id(stash_base: str, stash_key: str, tag_name: str, logger: JsonLogger) -> str:
     query = """
     query FindTags($filter: FindFilterType!) {
       findTags(filter: $filter) {
@@ -142,7 +154,7 @@ def ensure_tag_id(stash_base: str, stash_key: str, logger: JsonLogger) -> str:
       }
     }
     """
-    variables = {"filter": {"q": TAG_NAME, "per_page": 1, "page": 1}}
+    variables = {"filter": {"q": tag_name, "per_page": 1, "page": 1}}
     data = gql_post(
         f"{stash_base}/graphql",
         stash_key,
@@ -153,7 +165,7 @@ def ensure_tag_id(stash_base: str, stash_key: str, logger: JsonLogger) -> str:
     )
     tags = data.get("findTags", {}).get("tags") or []
     for tag in tags:
-        if (tag.get("name") or "").strip() == TAG_NAME:
+        if (tag.get("name") or "").strip() == tag_name:
             return tag["id"]
 
     mutation = """
@@ -165,20 +177,19 @@ def ensure_tag_id(stash_base: str, stash_key: str, logger: JsonLogger) -> str:
         f"{stash_base}/graphql",
         stash_key,
         mutation,
-        {"input": {"name": TAG_NAME}},
+        {"input": {"name": tag_name}},
         logger=logger,
         label="stash.tagCreate",
     )
     return result["tagCreate"]["id"]
 
 
-def add_tag_to_scene(
+def fetch_scene_tags(
     stash_base: str,
     stash_key: str,
-    scene: Dict[str, Any],
-    tag_id: str,
+    scene_id: str,
     logger: JsonLogger,
-) -> None:
+) -> List[Dict[str, Any]]:
     query = """
     query FindScene($id: ID!) {
       findScene(id: $id) {
@@ -191,13 +202,26 @@ def add_tag_to_scene(
         f"{stash_base}/graphql",
         stash_key,
         query,
-        {"id": scene["id"]},
+        {"id": scene_id},
         logger=logger,
         label="stash.findScene.tags",
     )
     scene_data = data.get("findScene") or {}
-    existing_tags = [t.get("id") for t in (scene_data.get("tags") or []) if t.get("id")]
-    tag_ids = existing_tags + [tag_id]
+    return scene_data.get("tags") or []
+
+
+def add_tags_to_scene(
+    stash_base: str,
+    stash_key: str,
+    scene_id: str,
+    tag_ids_to_add: List[str],
+    logger: JsonLogger,
+) -> None:
+    existing_tags = [t.get("id") for t in fetch_scene_tags(stash_base, stash_key, scene_id, logger) if t.get("id")]
+    tag_ids = existing_tags[:]
+    for tag_id in tag_ids_to_add:
+        if tag_id not in tag_ids:
+            tag_ids.append(tag_id)
     mutation = """
     mutation SceneUpdate($input: SceneUpdateInput!) {
       sceneUpdate(input: $input) { id }
@@ -207,11 +231,11 @@ def add_tag_to_scene(
         f"{stash_base}/graphql",
         stash_key,
         mutation,
-        {"input": {"id": scene["id"], "tag_ids": tag_ids}},
+        {"input": {"id": scene_id, "tag_ids": tag_ids}},
         logger=logger,
         label="stash.sceneUpdate.tags",
     )
-    logger.log("scene.tag.added", sceneId=scene.get("id"), tagId=tag_id, tagName=TAG_NAME)
+    logger.log("scene.tags.added", sceneId=scene_id, tagIds=tag_ids_to_add)
 
 
 def find_duplicate_pairs(scenes: List[Dict[str, Any]]) -> List[Tuple[Dict[str, Any], Dict[str, Any], float]]:
@@ -229,6 +253,8 @@ def find_duplicate_pairs(scenes: List[Dict[str, Any]]) -> List[Tuple[Dict[str, A
     for idx, entry in enumerate(normalized):
         for other in normalized[idx + 1 :]:
             if entry["studio"] != other["studio"]:
+                continue
+            if not numbers_compatible(entry["title"], other["title"]):
                 continue
             if not date_match(entry["scene"].get("date"), other["scene"].get("date")):
                 continue
@@ -281,7 +307,8 @@ def main() -> None:
     if scenes is None:
         scenes = snapshot_payload
     pairs = find_duplicate_pairs(scenes)
-    tag_id = ensure_tag_id(stash_url, stash_key, logger)
+    duplicate_tag_id = ensure_tag_id(stash_url, stash_key, TAG_NAME, logger)
+    saved_tag_id = ensure_tag_id(stash_url, stash_key, SAVED_TAG_NAME, logger)
 
     results = []
     tagged = 0
@@ -295,8 +322,18 @@ def main() -> None:
                 "similarity": similarity,
             }
         )
+        duplicate_id = str(duplicate.get("id"))
+        keep_id = str(keep.get("id"))
+        tags_to_add = [duplicate_tag_id]
+        duplicate_tags = fetch_scene_tags(stash_url, stash_key, duplicate_id, logger)
+        keep_tags = fetch_scene_tags(stash_url, stash_key, keep_id, logger)
+        has_saved = any((t.get("name") or "").strip().lower() == SAVED_TAG_NAME.lower() for t in duplicate_tags + keep_tags)
+        if has_saved:
+            tags_to_add.append(saved_tag_id)
         if not args.dry_run:
-            add_tag_to_scene(stash_url, stash_key, duplicate, tag_id, logger)
+            add_tags_to_scene(stash_url, stash_key, duplicate_id, tags_to_add, logger)
+            if has_saved:
+                add_tags_to_scene(stash_url, stash_key, keep_id, [saved_tag_id], logger)
             tagged += 1
         log_line(
             "Duplicate found: keep "
