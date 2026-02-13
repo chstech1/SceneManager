@@ -79,6 +79,7 @@ def main() -> None:
         "10": ("find_duplicate_folders.py", here / "find_duplicate_folders.py"),
         "11": ("mass_unrar.py", here / "mass_unrar.py"),
         "12": ("stashed-orginizedtosaved.py", here / "stashed-orginizedtosaved.py"),
+        "13": ("stash_move_matched.py", here / "stash_move_matched.py"),
     }
     requires_performer = {"1", "2", "3", "4", "5"}
     supports_out = {"1", "2", "3", "4", "5", "7", "8", "9"}
@@ -103,6 +104,7 @@ def main() -> None:
         print("10) find_duplicate_folders.py")
         print("11) mass_unrar.py")
         print("12) stashed-orginizedtosaved.py")
+        print("13) stash_move_matched.py")
         print("0) Exit")
         choice = prompt("Select an option: ")
 
