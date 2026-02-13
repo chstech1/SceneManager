@@ -96,6 +96,14 @@ python sync_studios_to_whisparr.py --out ./runs --dry-run
 python sync_studios_to_whisparr.py --out ./runs --limit-missing 25
 ```
 
+### `stashed-orginizedtosaved.py`
+Connects to a configured Stash GraphQL endpoint, finds scenes where `organized` is `true`, and adds the `Saved` tag to those scenes if it is not already present. If the `Saved` tag does not exist, it is created first. This script operates only on the single Stash instance defined by `STASH_BASE_URL` in the script and does not move/copy scenes between Stash instances.
+
+Example:
+```bash
+python stashed-orginizedtosaved.py
+```
+
 ### `find_duplicate_folders.py`
 Utility to scan a single directory for folders whose normalized names match (case-insensitive, alphanumeric only). It prints a table of duplicate folder pairs, including creation timestamps and file counts, to help identify possible duplicates.
 
