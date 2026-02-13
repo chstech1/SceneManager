@@ -78,6 +78,7 @@ def main() -> None:
         "9": ("sync_studios_to_whisparr.py", here / "sync_studios_to_whisparr.py"),
         "10": ("find_duplicate_folders.py", here / "find_duplicate_folders.py"),
         "11": ("mass_unrar.py", here / "mass_unrar.py"),
+        "12": ("stashed-orginizedtosaved.py", here / "stashed-orginizedtosaved.py"),
     }
     requires_performer = {"1", "2", "3", "4", "5"}
     supports_out = {"1", "2", "3", "4", "5", "7", "8", "9"}
@@ -101,6 +102,7 @@ def main() -> None:
         print("9) sync_studios_to_whisparr.py")
         print("10) find_duplicate_folders.py")
         print("11) mass_unrar.py")
+        print("12) stashed-orginizedtosaved.py")
         print("0) Exit")
         choice = prompt("Select an option: ")
 
