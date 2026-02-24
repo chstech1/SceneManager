@@ -13,7 +13,7 @@ python run_all_steps.py <stashdb_uuid> --out ./runs --dry-run --limit 25
 ```
 
 ### `interface.py`
-Interactive menu that lets you choose and run any of the scripts in this repo. Required arguments are prompted (including a performer picker sourced from existing `history.json` files), `--out` defaults to `./runs`, and output is streamed to the console.
+Interactive menu that lets you choose and run any of the scripts in this repo. Required arguments are prompted (including a performer picker sourced from existing `history.json` files) that now shows per performer: last step-4 run time, Stash scene count, StashDB scene count (when `02_stashdb_performer.json` exists), and favorited date. `--out` defaults to `./runs`, and output is streamed to the console.
 
 Example:
 ```bash
@@ -63,7 +63,7 @@ python stash_pipeline.py <stashdb_uuid> --out ./runs --step 2
 ```
 
 ### `history_favorites.py`
-Pulls all favorited performers from StashApp, maps them to StashDB UUIDs via `stash_ids`, and records each performer’s scenes into `history.json` stored at `./runs/<stashdb_uuid>/history.json`. Existing history entries are preserved and only new StashApp scenes are appended, never removed. Use `--out` to set the root folder.
+Pulls all favorited performers from StashApp, maps them to StashDB UUIDs via `stash_ids`, and records each performer’s scenes into `history.json` stored at `./runs/<stashdb_uuid>/history.json`. It also stores performer metadata used by `interface.py`, including `favoritedAtUtc`, `lastSeenFavoriteAtUtc`, and cached scene counts. Existing history entries are preserved and only new StashApp scenes are appended, never removed. Use `--out` to set the root folder.
 
 Example:
 ```bash
