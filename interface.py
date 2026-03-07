@@ -3,7 +3,40 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+
+
+HIDE_RECENT_DAYS = 90
+ANSI_BOLD = "\033[1m"
+ANSI_RESET = "\033[0m"
+
+
+def _parse_utc_iso(value: str) -> datetime | None:
+    if not value:
+        return None
+    cleaned = value.strip()
+    if cleaned.endswith("Z"):
+        cleaned = cleaned[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(cleaned)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _is_recent(last_run: str, days: int) -> bool:
+    run_dt = _parse_utc_iso(last_run)
+    if not run_dt:
+        return False
+    return run_dt >= (datetime.now(timezone.utc) - timedelta(days=days))
+
+
+def _bold(text: str) -> str:
+    return f"{ANSI_BOLD}{text}{ANSI_RESET}"
 
 
 def run_cmd(cmd: list[str], cwd: Path) -> int:
@@ -75,24 +108,35 @@ def load_favorite_performers(out_root: Path) -> list[tuple[str, str, str, int, i
 def prompt_performer_id(out_root: Path) -> str:
     performers = load_favorite_performers(out_root)
     if performers:
+        hidden_recent = [p for p in performers if _is_recent(p[2], HIDE_RECENT_DAYS)]
+        visible = [p for p in performers if not _is_recent(p[2], HIDE_RECENT_DAYS)]
+
         print("\nFavorite performers (from history.json):")
-        for idx, (pid, name, last_run, stash_scene_count, stashdb_scene_count, favorited_at) in enumerate(performers, start=1):
-            label = f"{name} [{pid}]" if name else pid
-            label = f"{label} | stash: {stash_scene_count} | stashdb: {stashdb_scene_count}"
-            if last_run:
-                label = f"{label} | last step4: {last_run}"
-            else:
-                label = f"{label} | last step4: never"
-            if favorited_at:
-                label = f"{label} | favorited: {favorited_at}"
-            else:
-                label = f"{label} | favorited: unknown"
-            print(f"{idx}) {label}")
-        choice = prompt("Select performer number or press Enter to type UUID: ")
-        if choice.isdigit():
-            index = int(choice)
-            if 1 <= index <= len(performers):
-                return performers[index - 1][0]
+        if hidden_recent:
+            print(f"Auto-hiding {len(hidden_recent)} performer(s) searched within the last {HIDE_RECENT_DAYS} days.")
+
+        if visible:
+            for idx, (pid, name, last_run, stash_scene_count, stashdb_scene_count, favorited_at) in enumerate(visible, start=1):
+                label = f"{name} [{pid}]" if name else pid
+                label = f"{label} | stash: {stash_scene_count} | stashdb: {stashdb_scene_count}"
+                if last_run:
+                    label = f"{label} | last step4: {last_run}"
+                else:
+                    label = f"{label} | last step4: never"
+                if favorited_at:
+                    label = f"{label} | favorited: {favorited_at}"
+                else:
+                    label = f"{label} | favorited: unknown"
+                if not last_run:
+                    label = _bold(label)
+                print(f"{idx}) {label}")
+            choice = prompt("Select performer number or press Enter to type UUID: ")
+            if choice.isdigit():
+                index = int(choice)
+                if 1 <= index <= len(visible):
+                    return visible[index - 1][0]
+        else:
+            print("No performers to show after auto-hide window; enter UUID manually.")
     return prompt("Enter StashDB performer UUID: ")
 
 

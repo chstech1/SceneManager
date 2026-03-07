@@ -13,7 +13,7 @@ python run_all_steps.py <stashdb_uuid> --out ./runs --dry-run --limit 25
 ```
 
 ### `interface.py`
-Interactive menu that lets you choose and run any of the scripts in this repo. Required arguments are prompted (including a performer picker sourced from existing `history.json` files) that now shows per performer: last step-4 run time, Stash scene count, StashDB scene count (when `02_stashdb_performer.json` exists), and favorited date. `--out` defaults to `./runs`, and output is streamed to the console.
+Interactive menu that lets you choose and run any of the scripts in this repo. Required arguments are prompted (including a performer picker sourced from existing `history.json` files) that shows per performer: last step-4 run time, Stash scene count, StashDB scene count (when `02_stashdb_performer.json` exists), and favorited date. Performers searched in the last 90 days are auto-hidden, and performers never searched are shown in bold. `--out` defaults to `./runs`, and output is streamed to the console.
 
 Example:
 ```bash
