@@ -13,7 +13,7 @@ python run_all_steps.py <stashdb_uuid> --out ./runs --dry-run --limit 25
 ```
 
 ### `interface.py`
-Interactive menu that lets you choose and run any of the scripts in this repo. Required arguments are prompted (including a performer picker sourced from existing `history.json` files), `--out` defaults to `./runs`, and output is streamed to the console.
+Interactive menu that lets you choose and run any of the scripts in this repo. Required arguments are prompted (including a performer picker sourced from existing `history.json` files) that shows per performer: last step-4 run time, Stash scene count, StashDB scene count (when `02_stashdb_performer.json` exists), and favorited date. Performers searched in the last 90 days are auto-hidden, and performers never searched are shown in bold. `--out` defaults to `./runs`, and output is streamed to the console.
 
 Example:
 ```bash
@@ -63,7 +63,7 @@ python stash_pipeline.py <stashdb_uuid> --out ./runs --step 2
 ```
 
 ### `history_favorites.py`
-Pulls all favorited performers from StashApp, maps them to StashDB UUIDs via `stash_ids`, and records each performer’s scenes into `history.json` stored at `./runs/<stashdb_uuid>/history.json`. Existing history entries are preserved and only new StashApp scenes are appended, never removed. Use `--out` to set the root folder.
+Pulls all favorited performers from StashApp, maps them to StashDB UUIDs via `stash_ids`, and records each performer’s scenes into `history.json` stored at `./runs/<stashdb_uuid>/history.json`. It also stores performer metadata used by `interface.py`, including `favoritedAtUtc`, `lastSeenFavoriteAtUtc`, and cached scene counts. Existing history entries are preserved and only new StashApp scenes are appended, never removed. Use `--out` to set the root folder.
 
 Example:
 ```bash
@@ -102,6 +102,28 @@ Connects to a configured Stash GraphQL endpoint, finds scenes where `organized` 
 Example:
 ```bash
 python stashed-orginizedtosaved.py
+```
+
+### `stash_move_matched.py`
+Moves matched Stash scenes from one filesystem root to another destination library path and then removes those scenes from the Stash database. By default it only processes matched scenes (where `stash_ids` is populated), maps Stash DB file paths from `--stash-root` to `--fs-root`, renames files to a sanitized pattern under `--dest-root`, and deletes the scene record with `delete_file=false` after a successful move. If a DB scene file is missing on disk, it removes the stale DB scene entry as cleanup.
+
+Required arguments: none (all options have defaults).
+
+Key arguments:
+- `--gql`: Stash GraphQL endpoint URL (default `http://10.11.1.33:9998/graphql`)
+- `--api-key`: Optional Stash API key header value
+- `--stash-root`: Stash-visible path prefix used in scene file paths (default `/newmedia`)
+- `--fs-root`: Local filesystem path that corresponds to `--stash-root` (default `/mnt/home_video_working`)
+- `--dest-root`: Destination root where matched files are moved (default `/mnt/syno_media`)
+- `--dry-run`: Print planned move/delete operations without changing files or DB
+- `--include-unmatched`: Also process scenes with empty/missing `stash_ids` (default is matched-only)
+- `--max`: Maximum scenes to process, `0` means no limit
+
+Examples:
+```bash
+python stash_move_matched.py --dry-run
+python stash_move_matched.py --gql http://stash.local:9998/graphql --api-key <key> \
+  --stash-root /newmedia --fs-root /mnt/home_video_working --dest-root /mnt/syno_media --max 100
 ```
 
 ### `find_duplicate_folders.py`

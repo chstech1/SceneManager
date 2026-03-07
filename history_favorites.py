@@ -162,6 +162,16 @@ def main() -> None:
 
         performer_name = performer.get("name") or ""
         history = load_history(history_path, stashdb_id, performer_name)
+
+        performer_meta = history.setdefault("performer", {})
+        if isinstance(performer_meta, dict):
+            performer_meta["id"] = stashdb_id
+            performer_meta["name"] = performer_name
+            performer_meta["stashPerformerId"] = str(performer.get("id") or "")
+            # We store the first run where this performer is observed as favorite.
+            performer_meta.setdefault("favoritedAtUtc", utc_now_iso())
+            performer_meta["lastSeenFavoriteAtUtc"] = utc_now_iso()
+
         scenes = stash_scenes_for_performer_id(stash_url, stash_key, performer["id"], logger)
 
         existing_ids = {str(s.get("id")) for s in history.get("scenes") or [] if s.get("id")}
@@ -185,8 +195,11 @@ def main() -> None:
             if scene_id and str(scene_id) not in current_scene_ids:
                 missing_summaries.append(f"{scene.get('title') or 'Untitled'} ({scene_id})")
 
-        if added > 0 or not history_path.exists():
-            write_json(history_path, history)
+        if isinstance(history.get("performer"), dict):
+            history["performer"]["stashSceneCount"] = len(scenes)
+            history["performer"]["historySceneCount"] = len(history.get("scenes") or [])
+
+        write_json(history_path, history)
 
         total_added += added
         write_log(f"Performer: {performer_name} [{stashdb_id}]")
