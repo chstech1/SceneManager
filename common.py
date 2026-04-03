@@ -210,6 +210,7 @@ def gql_post(
 
     last_status: Optional[int] = None
     last_body: str = ""
+    last_error: str = ""
 
     for i, auth_headers in enumerate(auth_header_variants, start=1):
         headers = {"Content-Type": "application/json", **auth_headers}
@@ -225,14 +226,26 @@ def gql_post(
             variables=variables,
         )
 
-        resp = throttled_request(
-            "POST",
-            url,
-            headers=headers,
-            json_body={"query": query, "variables": variables},
-            timeout=timeout,
-            delay=delay,
-        )
+        try:
+            resp = throttled_request(
+                "POST",
+                url,
+                headers=headers,
+                json_body={"query": query, "variables": variables},
+                timeout=timeout,
+                delay=delay,
+            )
+        except requests.RequestException as e:
+            last_error = f"{type(e).__name__}: {e}"
+            logger.log(
+                "http.exception",
+                label=label,
+                attempt=i,
+                authHeader=(list(auth_headers.keys())[0] if auth_headers else "none"),
+                errorType=type(e).__name__,
+                error=str(e),
+            )
+            continue
 
         body_preview = (resp.text or "")[:700]
         logger.log(
@@ -283,4 +296,7 @@ def gql_post(
         )
         return data["data"]
 
-    die(f"GraphQL auth failed for {url}. Last status={last_status}. Last body={last_body[:700]}")
+    die(
+        f"GraphQL auth/transport failed for {url}. "
+        f"Last status={last_status}. Last error={last_error}. Last body={last_body[:700]}"
+    )
