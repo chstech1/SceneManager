@@ -40,6 +40,13 @@ def iso_utc(dtobj: dt.datetime) -> str:
 def safe_title(s: Any) -> str:
     return (s or "").strip()
 
+def studio_key(s: str) -> str:
+    """
+    Normalized key for studio uniqueness.
+    Collapses internal whitespace and compares case-insensitively.
+    """
+    return " ".join((s or "").split()).casefold()
+
 def now_local_str() -> str:
     # readable log timestamps in local time
     return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -321,6 +328,7 @@ def main() -> None:
     episodes_cache: Dict[int, List[Dict[str, Any]]] = {}
 
     results: List[Dict[str, Any]] = []
+    missing_studios: Dict[str, Dict[str, Any]] = {}
 
     for i, s in enumerate(selected, start=1):
         title = safe_title(s.get("title"))
@@ -342,6 +350,17 @@ def main() -> None:
             # we are NOT auto-adding in this version (you had that earlier, but it needs config and careful behavior)
             results.append({"stashdbSceneId": stashdb_scene_id, "title": title, "date": date, "studio": studio, "status": "studio_missing_in_whisparr"})
             mark_scene(state, stashdb_scene_id, "studio_missing_in_whisparr")
+            key = studio_key(studio)
+            rec = missing_studios.get(key)
+            if not rec:
+                rec = {"studio": studio, "count": 0, "scenes": []}
+                missing_studios[key] = rec
+            rec["count"] = int(rec.get("count") or 0) + 1
+            rec["scenes"].append({
+                "stashdbSceneId": stashdb_scene_id,
+                "title": title,
+                "date": date,
+            })
             rlog(f"  -> Studio series not found in Whisparr: '{studio}' (no auto-add in this build)")
             continue
 
@@ -392,6 +411,30 @@ def main() -> None:
     # Write artifacts
     out_path = run_dir / "04_whisparr_actions.json"
     write_json(out_path, {"processed": len(selected), "results": results})
+    missing_studios_path = run_dir / "04_missing_studios_in_whisparr.json"
+    missing_studios_sorted = sorted(
+        missing_studios.values(),
+        key=lambda item: studio_key(str(item.get("studio") or "")),
+    )
+    write_json(
+        missing_studios_path,
+        {
+            "generatedAtUtc": utc_now_iso(),
+            "totalUniqueStudiosMissing": len(missing_studios_sorted),
+            "totalScenesWithMissingStudios": sum(int(item.get("count") or 0) for item in missing_studios_sorted),
+            "studios": missing_studios_sorted,
+        },
+    )
+
+    missing_studios_txt_path = run_dir / "04_missing_studios_in_whisparr.txt"
+    seen_studio_names: set[str] = set()
+    with missing_studios_txt_path.open("w", encoding="utf-8") as f:
+        for item in missing_studios_sorted:
+            name = str(item.get("studio") or "").strip()
+            key = studio_key(name)
+            if name and key and key not in seen_studio_names:
+                seen_studio_names.add(key)
+                f.write(name + "\n")
 
     # Update state at end
     state["lastRunAtUtc"] = utc_now_iso()
@@ -399,8 +442,21 @@ def main() -> None:
     save_state(state_path, state)
 
     logger.log("artifact.written", step=4, path=str(out_path), results=len(results))
+    logger.log("artifact.written", step=4, path=str(missing_studios_path), studios=len(missing_studios_sorted))
+    logger.log("artifact.written", step=4, path=str(missing_studios_txt_path), studios=len(missing_studios_sorted))
     logger.log("state.written", path=str(state_path))
-    rlog("Done. Wrote: 04_whisparr_actions.json, 04_whisparr_state.json and readable.log")
+    if missing_studios_sorted:
+        rlog(
+            f"Missing studio summary: {len(missing_studios_sorted)} unique studio(s), "
+            f"{sum(int(item.get('count') or 0) for item in missing_studios_sorted)} scene(s). "
+            f"See 04_missing_studios_in_whisparr.json / .txt"
+        )
+    else:
+        rlog("Missing studio summary: none")
+    rlog(
+        "Done. Wrote: 04_whisparr_actions.json, 04_missing_studios_in_whisparr.json, "
+        "04_missing_studios_in_whisparr.txt, 04_whisparr_state.json and readable.log"
+    )
     logger.log("run.end", status="ok")
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ python run_all_steps.py <stashdb_uuid> --out ./runs --dry-run --limit 25
 ```
 
 ### `interface.py`
-Interactive menu that lets you choose and run any of the scripts in this repo. Required arguments are prompted (including a performer picker sourced from existing `history.json` files) that shows per performer: last step-4 run time, Stash scene count, StashDB scene count (when `02_stashdb_performer.json` exists), and favorited date. Performers searched in the last 90 days are auto-hidden, and performers never searched are shown in bold. `--out` defaults to `./runs`, and output is streamed to the console.
+Interactive menu that lets you choose and run any of the scripts in this repo. Required arguments are prompted (including a performer picker sourced from existing `history.json` files) that shows per performer: last step-4 run time, Stash scene count, StashDB scene count (when `02_stashdb_performer.json` exists), and favorited date. Performers searched in the last 90 days are auto-hidden by default, but you can choose an option to show the full performer list (including recent entries). Performers never searched are shown in bold. `--out` defaults to `./runs`, and output is streamed to the console.
 
 Example:
 ```bash
@@ -46,6 +46,7 @@ python step3_compare.py <stashdb_uuid> --out ./runs
 
 ### `step4_whisparr.py`
 Uses the missing list from step 3 to find matching Whisparr episodes and enqueue `EpisodeSearch` commands. It keeps per-scene history in a state file to avoid retrying older failures beyond a cutoff, and supports rate limiting and dry runs. Outputs logs and updates the run folder under `./runs/<performer_id>/`.
+It also writes `04_missing_studios_in_whisparr.json` and `04_missing_studios_in_whisparr.txt` (unique studio names) so you can quickly review studios that were missing from Whisparr and add them later.
 
 Examples:
 ```bash
