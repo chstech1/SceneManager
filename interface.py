@@ -38,6 +38,28 @@ def _is_recent(last_run: str, days: int) -> bool:
 def _bold(text: str) -> str:
     return f"{ANSI_BOLD}{text}{ANSI_RESET}"
 
+def _performer_label(
+    pid: str,
+    name: str,
+    last_run: str,
+    stash_scene_count: int,
+    stashdb_scene_count: int,
+    favorited_at: str,
+) -> str:
+    label = f"{name} [{pid}]" if name else pid
+    label = f"{label} | stash: {stash_scene_count} | stashdb: {stashdb_scene_count}"
+    if last_run:
+        label = f"{label} | last step4: {last_run}"
+    else:
+        label = f"{label} | last step4: never"
+    if favorited_at:
+        label = f"{label} | favorited: {favorited_at}"
+    else:
+        label = f"{label} | favorited: unknown"
+    if not last_run:
+        label = _bold(label)
+    return label
+
 
 def run_cmd(cmd: list[str], cwd: Path) -> int:
     print("\n=== RUN ===")
@@ -117,26 +139,39 @@ def prompt_performer_id(out_root: Path) -> str:
 
         if visible:
             for idx, (pid, name, last_run, stash_scene_count, stashdb_scene_count, favorited_at) in enumerate(visible, start=1):
-                label = f"{name} [{pid}]" if name else pid
-                label = f"{label} | stash: {stash_scene_count} | stashdb: {stashdb_scene_count}"
-                if last_run:
-                    label = f"{label} | last step4: {last_run}"
-                else:
-                    label = f"{label} | last step4: never"
-                if favorited_at:
-                    label = f"{label} | favorited: {favorited_at}"
-                else:
-                    label = f"{label} | favorited: unknown"
-                if not last_run:
-                    label = _bold(label)
+                label = _performer_label(pid, name, last_run, stash_scene_count, stashdb_scene_count, favorited_at)
                 print(f"{idx}) {label}")
-            choice = prompt("Select performer number or press Enter to type UUID: ")
+            if hidden_recent:
+                print("a) Show all performers (including recently searched)")
+            choice = prompt("Select performer number, 'a' to show all, or press Enter to type UUID: ")
             if choice.isdigit():
                 index = int(choice)
                 if 1 <= index <= len(visible):
                     return visible[index - 1][0]
+            if choice.lower() == "a" and hidden_recent:
+                print("\nAll favorite performers (including auto-hidden recent):")
+                for idx, (pid, name, last_run, stash_scene_count, stashdb_scene_count, favorited_at) in enumerate(performers, start=1):
+                    label = _performer_label(pid, name, last_run, stash_scene_count, stashdb_scene_count, favorited_at)
+                    print(f"{idx}) {label}")
+                all_choice = prompt("Select performer number from full list or press Enter to type UUID: ")
+                if all_choice.isdigit():
+                    index = int(all_choice)
+                    if 1 <= index <= len(performers):
+                        return performers[index - 1][0]
         else:
             print("No performers to show after auto-hide window; enter UUID manually.")
+            if hidden_recent:
+                show_all = prompt("Type 'a' to show all performers, or press Enter to type UUID: ")
+                if show_all.lower() == "a":
+                    print("\nAll favorite performers (including auto-hidden recent):")
+                    for idx, (pid, name, last_run, stash_scene_count, stashdb_scene_count, favorited_at) in enumerate(performers, start=1):
+                        label = _performer_label(pid, name, last_run, stash_scene_count, stashdb_scene_count, favorited_at)
+                        print(f"{idx}) {label}")
+                    all_choice = prompt("Select performer number from full list or press Enter to type UUID: ")
+                    if all_choice.isdigit():
+                        index = int(all_choice)
+                        if 1 <= index <= len(performers):
+                            return performers[index - 1][0]
     return prompt("Enter StashDB performer UUID: ")
 
 
